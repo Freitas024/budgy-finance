@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  /* === BACKGROUNDS === */
+  --color-bg-base: #08091A;
+  --color-bg-sidebar: #0D1021;
+  --color-bg-card: #111827;
+  --color-bg-card-hover: #161D2F;
+  --color-bg-elevated: #1A2235;
+
+  /* === BRAND === */
+  --color-brand: #6C63F5;
+  --color-brand-hover: #5A52D5;
+  --color-brand-light: #7E77F7;
+  --color-brand-muted: #2D2A5E;
+
+  /* === AUTH PANEL === */
+  --color-panel-bg: #151A42;
+  --color-panel-accent: #1E2558;
+
+  /* === STATUS === */
+  --color-success: #22C55E;
+  --color-success-bg: #0F2818;
+  --color-danger: #EF4444;
+  --color-danger-bg: #2A1010;
+  --color-warning: #F97316;
+  --color-warning-bg: #2A1A08;
+
+  /* === TEXTO === */
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #8892A4;
+  --color-text-muted: #4B5468;
+  --color-text-link: #6C63F5;
+
+  /* === BORDERS === */
+  --color-border-subtle: #1C2438;
+  --color-border-default: #252E45;
+  --color-border-focus: #6C63F5;
+
+  /* === BORDER RADIUS === */
+  --radius-card: 12px;
+  --radius-input: 8px;
+  --radius-badge: 6px;
+
+  /* === FONTE === */
+  --font-sans: 'Inter', sans-serif;
+
+  /* === AUTH === */
+  --color-auth-form-bg: #0B0D24;
+  --color-auth-input-bg: #08091A;
+  --color-hero-start: #12153A;
+  --color-hero-end: #1A1058;
+}
