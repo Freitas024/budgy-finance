@@ -9,6 +9,7 @@ import { banks } from "@/src/config/bank";
 export default function SelectBankPage() {
     const router = useRouter();
     const [selectedBanks, setSelectedBanks] = useState<string[]>([]);
+    const [showPopup, setShowPopup] = useState(false);
 
     const toggleBank = (id: string) => {
         setSelectedBanks((prev) =>
@@ -16,6 +17,14 @@ export default function SelectBankPage() {
                 ? prev.filter((bankId) => bankId !== id)
                 : [...prev, id]
         );
+    };
+
+    const handleConnect = () => {
+        if (selectedBanks.length === 0) {
+            setShowPopup(true);
+        } else {
+            // fluxo real de conexao com o banco
+        }
     };
 
     return (
@@ -90,7 +99,8 @@ export default function SelectBankPage() {
                         </Button>
                         <Button
                             type="button"
-                            className="flex-1 opacity-50 cursor-not-allowed"
+                            className="flex-1"
+                            onClick={handleConnect}
                         >
                             Conectar e Finalizar
                         </Button>
@@ -118,6 +128,24 @@ export default function SelectBankPage() {
                     </div>
                 </div>
             </div>
+
+            {showPopup && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-sm rounded-2xl border border-[#2D2A54] bg-[#131033] p-6 text-center shadow-2xl">
+                        <h3 className="mb-3 text-lg font-bold text-white">Oops! Quase lá...</h3>
+                        <p className="mb-6 text-sm text-text-secondary leading-relaxed">
+                            Por favor, escolha pelo menos um banco da lista para prosseguirmos. É rapidinho e super seguro! 😊
+                        </p>
+                        <Button
+                            type="button"
+                            className="w-full"
+                            onClick={() => setShowPopup(false)}
+                        >
+                            Entendi!
+                        </Button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

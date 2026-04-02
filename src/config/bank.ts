@@ -5,4 +5,5 @@ export const banks = [
     { id: "itau", name: "Itaú", color: "bg-[#EC7000]", iconColor: "text-white" },
     { id: "bradesco", name: "Bradesco", color: "bg-[#CC092F]", iconColor: "text-white" },
     { id: "inter", name: "Banco Inter", color: "bg-[#FF7A00]", iconColor: "text-white" },
+    { id: "outros", name: "Outros", color: "bg-[#2D2A54]", iconColor: "text-white" },
 ];
