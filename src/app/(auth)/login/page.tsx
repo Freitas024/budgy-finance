@@ -1,19 +1,34 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { createClient } from "@/src/lib/supabase/client";
 import { loginSchema, type LoginSchema } from "@/src/lib/validations/auth";
 import { Mail, Lock, ArrowRight, Layers } from "lucide-react";
 import { Input, Button, Checkbox, Divider } from "@/src/components/ui";
 
 export default function LoginPage() {
 
+  const router = useRouter();
   const { register, handleSubmit, formState: { errors, isSubmitting }, } = useForm<LoginSchema>({
     resolver: zodResolver(loginSchema),
   });
 
-  function onSubmit(data: LoginSchema) {
-    console.log(data);
+  async function onSubmit(data: LoginSchema) {
+    const supabase = createClient();
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: data.email,
+      password: data.password,
+    });
+
+    if (error) {
+      console.error("Error signing in:", error);
+      return;
+    }
+
+    router.push("/home");
   }
 
   return (

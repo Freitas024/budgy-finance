@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { createClient } from "@/src/lib/supabase/client";
 import { Mail, Lock, ArrowRight, Wallet, User } from "lucide-react";
 import { Input, Button } from "@/src/components/ui";
 import { registerSchema, type RegisterSchema } from "@/src/lib/validations/auth";
@@ -18,8 +19,24 @@ export default function RegisterPage() {
         resolver: zodResolver(registerSchema),
     });
 
-    function onSubmit(data: RegisterSchema) {
-        console.log(`Dados recebidos: ${data}`);
+    async function onSubmit(data: RegisterSchema) {
+        const supabase = createClient();
+
+        const { error } = await supabase.auth.signUp({
+            email: data.email,
+            password: data.password,
+            options: {
+                data: {
+                    name: data.name,
+                }
+            }
+        });
+
+        if (error) {
+            console.error("Error signing up:", error);
+            return;
+        }
+
         router.push("/select_bank");
 
     }

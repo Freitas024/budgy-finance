@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -8,9 +9,28 @@ import {
     LogOut
 } from "lucide-react";
 import { navigation } from "@/src/config/menuSIdebar";
+import { createClient } from "@/src/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 export function Sidebar() {
     const pathname = usePathname();
+    const router = useRouter();
+    const [user, setUser] = useState("");
+
+    useEffect(() => {
+        const supabase = createClient();
+        supabase.auth.getUser().then((res) => {
+            setUser(res.data.user?.user_metadata.name ?? "");
+        });
+    }, []);
+
+    async function handleLogout() {
+        const supabase = createClient();
+
+        await supabase.auth.signOut();
+        router.push("/login");
+    }
+
 
     return (
         <>
@@ -49,17 +69,17 @@ export function Sidebar() {
                         <button type="button" className="transition-colors hover:text-text-primary">
                             <Sun className="h-5 w-5" />
                         </button>
-                        <button type="button" className="transition-colors hover:text-text-primary">
+                        <button onClick={handleLogout} type="button" className="transition-colors hover:text-text-primary">
                             <LogOut className="h-5 w-5" />
                         </button>
                     </div>
 
                     <div className="flex items-center gap-3 px-2">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-bold text-white">
-                            GB
+                            {user.slice(0, 2).toUpperCase()}
                         </div>
                         <div className="flex flex-col overflow-hidden">
-                            <span className="truncate text-sm font-medium text-text-primary">Gabriel</span>
+                            <span className="truncate text-sm font-medium text-text-primary">{user.slice(0, 8).toLowerCase()}</span>
                             <span className="truncate text-xs text-text-secondary">Pro Plan</span>
                         </div>
                     </div>
