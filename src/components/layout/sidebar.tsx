@@ -79,7 +79,7 @@ export function Sidebar() {
                             {user.slice(0, 2).toUpperCase()}
                         </div>
                         <div className="flex flex-col overflow-hidden">
-                            <span className="truncate text-sm font-medium text-text-primary">{user.slice(0, 8).toLowerCase()}</span>
+                            <span className="truncate text-sm font-medium text-text-primary">{user.toLowerCase()}</span>
                             <span className="truncate text-xs text-text-secondary">Pro Plan</span>
                         </div>
                     </div>

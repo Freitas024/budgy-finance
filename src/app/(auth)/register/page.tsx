@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,6 +11,8 @@ import { registerSchema, type RegisterSchema } from "@/src/lib/validations/auth"
 
 export default function RegisterPage() {
 
+    const [error, setError] = useState("");
+
     const router = useRouter();
     const {
         register,
@@ -19,21 +22,26 @@ export default function RegisterPage() {
         resolver: zodResolver(registerSchema),
     });
 
-    async function onSubmit(data: RegisterSchema) {
+    async function onSubmit(formData: RegisterSchema) {
         const supabase = createClient();
 
-        const { error } = await supabase.auth.signUp({
-            email: data.email,
-            password: data.password,
+        const { data, error } = await supabase.auth.signUp({
+            email: formData.email,
+            password: formData.password,
             options: {
                 data: {
-                    name: data.name,
+                    name: formData.name,
                 }
             }
         });
 
         if (error) {
-            console.error("Error signing up:", error);
+            setError(error.message);
+            return;
+        }
+
+        if (data.user?.identities?.length === 0) {
+            setError("Este email já está cadastrado.");
             return;
         }
 
@@ -89,6 +97,10 @@ export default function RegisterPage() {
                             error={errors.password?.message}
                             {...register("password")}
                         />
+
+                        {error && (
+                            <p className="text-sm text-rose-500 text-center">{error}</p>
+                        )}
 
                         <Button
                             type="submit"

@@ -1,13 +1,139 @@
-import { Download, Plus, TrendingUp, ArrowUpRight, ArrowDownRight } from "lucide-react";
+"use client";
+
+import { useState, useEffect } from "react";
+import { createClient } from "@/src/lib/supabase/client";
+import { Download, Plus, TrendingUp, ArrowUpRight, ArrowDownRight, Building2 } from "lucide-react";
 import { Button, Card } from "@/src/components/ui";
+import { banks } from "@/src/config/bank";
+import {
+    AreaChart,
+    Area,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip as RechartsTooltip,
+    ResponsiveContainer,
+    PieChart,
+    Pie,
+    Cell,
+} from "recharts";
+
+interface Account {
+    id: string;
+    bank_name: string;
+    bank_slug: string;
+    balance: number;
+}
+
+
+interface Transaction {
+    id: string;
+    description: string;
+    amount: number;
+    type: "income" | "expense";
+    date: string;
+}
 
 export default function HomePage() {
+    const [user, setUser] = useState("");
+    const [totalIncome, setTotalIncome] = useState(0);
+    const [totalExpense, setTotalExpense] = useState(0);
+    const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
+    const [recentAccounts, setRecentAccounts] = useState<Account[]>([]);
+    const [balanceHistory, setBalanceHistory] = useState<{ date: string; balance: number }[]>([]);
+    const [categoryExpenses, setCategoryExpenses] = useState<{ name: string; value: number }[]>([]);
+
+    const COLORS = ['#6C63F5', '#FB7185', '#34D399', '#FBBF24', '#818CF8', '#2D2A54'];
+
+    const formatCurrency = (value: number) =>
+        value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+    const formatDate = (dateStr: string) =>
+        new Date(`${dateStr.split("T")[0]}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+
+    useEffect(() => {
+        const supabase = createClient();
+
+        supabase.auth.getUser().then((res) => {
+            setUser(res.data.user?.user_metadata.name ?? "");
+        });
+
+        supabase
+            .from("transactions")
+            .select("amount, type, date, category")
+            .order("date", { ascending: true })
+            .then(({ data }) => {
+                if (!data) return;
+
+                let currentBalance = 0;
+                const balanceByDate: Record<string, number> = {};
+                const categoryTotals: Record<string, number> = {};
+
+                const income = data.filter((t) => t.type === "income").reduce((sum, t) => sum + Number(t.amount), 0);
+                const expense = data.filter((t) => t.type === "expense").reduce((sum, t) => sum + Number(t.amount), 0);
+
+                data.forEach((tx) => {
+                    if (tx.type === "income") {
+                        currentBalance += Number(tx.amount);
+                    } else {
+                        currentBalance -= Number(tx.amount);
+
+                        if (!categoryTotals[tx.category]) {
+                            categoryTotals[tx.category] = 0;
+                        }
+                        categoryTotals[tx.category] += Number(tx.amount);
+                    }
+
+                    const dateObj = new Date(`${tx.date}T12:00:00`);
+                    const day = dateObj.getDate().toString().padStart(2, '0');
+                    const month = dateObj.toLocaleString('pt-BR', { month: 'short' }).replace('.', '');
+                    const formattedDate = `${day} ${month.charAt(0).toUpperCase() + month.slice(1)}`;
+
+                    balanceByDate[formattedDate] = currentBalance;
+                });
+
+                const historyArr = Object.keys(balanceByDate).map(date => ({
+                    date,
+                    balance: balanceByDate[date]
+                }));
+
+                const categoryArr = Object.keys(categoryTotals).map(name => ({
+                    name,
+                    value: categoryTotals[name]
+                })).sort((a, b) => b.value - a.value);
+
+                setBalanceHistory(historyArr);
+                setCategoryExpenses(categoryArr);
+                setTotalIncome(income);
+                setTotalExpense(expense);
+            });
+
+        supabase
+            .from("transactions")
+            .select("*, accounts(bank_name)")
+            .order("date", { ascending: false })
+            .limit(5)
+            .then(({ data }) => {
+                if (data) setRecentTransactions(data);
+            });
+
+        supabase
+            .from("accounts")
+            .select("*")
+            .limit(4)
+            .then(({ data }) => {
+                if (data) setRecentAccounts(data);
+            });
+
+    }, []);
+
+    const balance = totalIncome - totalExpense;
     return (
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
             {/* Título e Botões de Ação */}
             <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-white xl:text-3xl">Olá, Gabriel 👋</h1>
+                    <h1 className="text-2xl font-bold text-white xl:text-3xl">Olá, {user.toLowerCase()} 👋</h1>
                     <p className="mt-1 text-sm text-text-secondary">Seja Bem-Vindo</p>
                 </div>
                 <div className="flex gap-3">
@@ -30,7 +156,7 @@ export default function HomePage() {
                 <div className="relative z-10 mb-8 flex items-start justify-between">
                     <div>
                         <p className="mb-1 text-sm font-medium text-text-secondary">Saldo Consolidado</p>
-                        <h2 className="text-3xl font-bold text-white lg:text-4xl">R$ 24.850,40</h2>
+                        <h2 className="text-3xl font-bold text-white lg:text-4xl">{formatCurrency(balance)}</h2>
                     </div>
                     <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-500">
                         <TrendingUp className="h-3.5 w-3.5" />
@@ -48,7 +174,7 @@ export default function HomePage() {
                                 </div>
                                 <span className="text-sm font-medium text-text-secondary">Entradas</span>
                             </div>
-                            <span className="text-xl font-bold text-white">R$ 15.200,00</span>
+                            <span className="text-xl font-bold text-white">{formatCurrency(totalIncome)}</span>
                         </div>
                     </Card>
 
@@ -60,7 +186,7 @@ export default function HomePage() {
                                 </div>
                                 <span className="text-sm font-medium text-text-secondary">Saídas</span>
                             </div>
-                            <span className="text-xl font-bold text-white">R$ 4.350,60</span>
+                            <span className="text-xl font-bold text-white">{formatCurrency(totalExpense)}</span>
                         </div>
                     </Card>
                 </div>
@@ -69,17 +195,119 @@ export default function HomePage() {
             {/* Espaços para os Gráficos */}
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
                 <Card className="p-6 lg:p-8 lg:col-span-2">
-                    <h3 className="text-base font-bold text-white">Evolução do Saldo</h3>
-                    <div className="min-h-[280px] w-full">
-                        {/* O gráfico será inserido aqui */}
+                    <h3 className="text-base font-bold text-white mb-6">Evolução do Saldo</h3>
+                    <div className="h-[280px] w-full">
+                        {balanceHistory.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={balanceHistory} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                                    <defs>
+                                        <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#6C63F5" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#6C63F5" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#2D2A54" vertical={false} />
+                                    <XAxis
+                                        dataKey="date"
+                                        stroke="#8F8CBA"
+                                        fontSize={12}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        dy={10}
+                                        minTickGap={30}
+                                    />
+                                    <YAxis
+                                        stroke="#8F8CBA"
+                                        fontSize={12}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        tickFormatter={(value) => `R$${value >= 1000 ? (value / 1000).toFixed(value % 1000 !== 0 ? 1 : 0) + 'k' : value}`}
+                                    />
+                                    <RechartsTooltip
+                                        content={({ active, payload, label }) => {
+                                            if (active && payload && payload.length) {
+                                                return (
+                                                    <div className="rounded-lg border border-[#2D2A54] bg-[#0C0A20] p-3 shadow-xl">
+                                                        <p className="mb-1 text-xs text-text-secondary">{label}</p>
+                                                        <p className="font-bold text-white">{formatCurrency(payload[0].value as number)}</p>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        }}
+                                        cursor={{ stroke: '#2D2A54', strokeWidth: 1 }}
+                                    />
+                                    <Area
+                                        type="monotone"
+                                        dataKey="balance"
+                                        stroke="#6C63F5"
+                                        strokeWidth={2}
+                                        fillOpacity={1}
+                                        fill="url(#colorBalance)"
+                                        activeDot={{ r: 6, fill: "#6C63F5", stroke: "#0C0A20", strokeWidth: 2 }}
+                                    />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="flex h-full items-center justify-center text-sm text-text-secondary">
+                                Dados insuficientes para o gráfico.
+                            </div>
+                        )}
                     </div>
                 </Card>
 
-                <Card className="p-6 lg:p-8 lg:col-span-1">
-                    <h3 className="text-base font-bold text-white">Despesas por Categoria</h3>
-                    <div className="min-h-[280px] w-full">
-                        {/* O gráfico será inserido aqui */}
+                <Card className="p-6 lg:p-8 lg:col-span-1 flex flex-col">
+                    <h3 className="text-base font-bold text-white mb-6">Despesas por Categoria</h3>
+                    <div className="h-[280px] w-full flex-1">
+                        {categoryExpenses.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={categoryExpenses}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={60}
+                                        outerRadius={90}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                        stroke="none"
+                                    >
+                                        {categoryExpenses.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <RechartsTooltip
+                                        content={({ active, payload }) => {
+                                            if (active && payload && payload.length) {
+                                                return (
+                                                    <div className="rounded-lg border border-[#2D2A54] bg-[#0C0A20] p-3 shadow-xl">
+                                                        <p className="mb-1 text-xs text-text-secondary">{payload[0].name}</p>
+                                                        <p className="font-bold text-white">{formatCurrency(payload[0].value as number)}</p>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        }}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="flex h-full items-center justify-center text-sm text-text-secondary">
+                                Nenhuma despesa para exibir.
+                            </div>
+                        )}
                     </div>
+                    {/* Legendas Embaixo */}
+                    {categoryExpenses.length > 0 && (
+                        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+                            {categoryExpenses.map((cat, idx) => (
+                                <div key={cat.name} className="flex items-center gap-1.5 text-xs text-text-secondary">
+                                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                                    {cat.name}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </Card>
             </div>
 
@@ -94,7 +322,30 @@ export default function HomePage() {
                         </button>
                     </div>
                     <div className="min-h-[300px] w-full">
-                        {/* Os cards de transações serão inseridos aqui */}
+                        <Card className="divide-y divide-[#2D2A54] p-0">
+                            {recentTransactions.map((tx) => (
+                                <div key={tx.id} className="flex items-center justify-between px-6 py-4">
+
+                                    {/* Esquerda: Ícone + Descrição */}
+                                    <div className="flex items-center gap-4">
+                                        <div className={`p-2 rounded-xl ${tx.type === "income" ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"}`}>
+                                            {tx.type === "income" ? <ArrowUpRight /> : <ArrowDownRight />}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-white">{tx.description}</p>
+                                            <p className="text-xs text-text-secondary">{formatDate(tx.date)}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Direita: Valor em R$ */}
+                                    <span className={`font-bold ${tx.type === "income" ? "text-emerald-500" : "text-rose-500"}`}>
+                                        {tx.type === "income" ? "+" : "−"} {formatCurrency(tx.amount)}
+                                    </span>
+
+                                </div>
+                            ))}
+                        </Card>
+
                     </div>
                 </div>
 
@@ -107,7 +358,31 @@ export default function HomePage() {
                         </button>
                     </div>
                     <div className="min-h-[300px] w-full">
-                        {/* Os cards de contas conectadas serão inseridos aqui */}
+                        <div className="flex flex-col gap-4">
+                            {recentAccounts.map((account) => {
+                                const bankConfig = banks.find((b) => b.id === account.bank_slug);
+                                const colorClass = bankConfig?.color ?? "bg-[#2D2A54]";
+                                return (
+                                    <div key={account.id} className="flex items-center justify-between rounded-xl border border-[#2D2A54] bg-[#131033] p-4 transition-colors hover:border-text-muted">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${colorClass}`}>
+                                                <Building2 className="h-5 w-5 text-white" />
+                                            </div>
+                                            <div className="flex flex-col gap-0.5">
+                                                <p className="font-bold text-white text-sm">{account.bank_name}</p>
+                                                <span className="text-xs text-text-secondary">{formatCurrency(account.balance)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            {recentAccounts.length === 0 && (
+                                <div className="rounded-xl border border-[#2D2A54] bg-[#131033] p-8 text-center">
+                                    <p className="text-sm text-text-secondary">Nenhuma conta conectada.</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

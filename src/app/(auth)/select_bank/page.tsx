@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Building2, Lock, Wallet, BadgeCheck } from "lucide-react";
 import { Button } from "@/src/components/ui";
 import { banks } from "@/src/config/bank";
+import { createClient } from "@/src/lib/supabase/client";
 
 export default function SelectBankPage() {
     const router = useRouter();
@@ -19,12 +20,30 @@ export default function SelectBankPage() {
         );
     };
 
-    const handleConnect = () => {
+    const handleConnect = async () => {
         if (selectedBanks.length === 0) {
             setShowPopup(true);
-        } else {
-            // fluxo real de conexao com o banco
+            return;
         }
+
+        const supabase = createClient();
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session?.user) return;
+
+        const user = session.user;
+
+        const { error } = await supabase.from("accounts").insert(
+            selectedBanks.map((bankId) => ({
+                user_id: user.id,
+                bank_name: banks.find((b) => b.id === bankId)?.name,
+                bank_slug: bankId,
+            }))
+        );
+
+        if (error) return;
+
+        router.push("/home");
     };
 
     return (

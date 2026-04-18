@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,20 +12,21 @@ import { Input, Button, Checkbox, Divider } from "@/src/components/ui";
 export default function LoginPage() {
 
   const router = useRouter();
+  const [authError, setAuthError] = useState("");
   const { register, handleSubmit, formState: { errors, isSubmitting }, } = useForm<LoginSchema>({
     resolver: zodResolver(loginSchema),
   });
 
-  async function onSubmit(data: LoginSchema) {
+  async function onSubmit(formData: LoginSchema) {
     const supabase = createClient();
 
     const { error } = await supabase.auth.signInWithPassword({
-      email: data.email,
-      password: data.password,
+      email: formData.email,
+      password: formData.password,
     });
 
     if (error) {
-      console.error("Error signing in:", error);
+      setAuthError(error.message);
       return;
     }
 
@@ -84,7 +86,10 @@ export default function LoginPage() {
               </a>
             </div>
 
-            {/* Submit */}
+            {authError && (
+              <p className="text-sm text-rose-500 text-center">{authError}</p>
+            )}
+
             <Button
               type="submit"
               size="lg"
