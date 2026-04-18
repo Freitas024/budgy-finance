@@ -1,10 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, ShieldCheck, MoreHorizontal, CheckCircle2, Building2, X, BadgeCheck } from "lucide-react";
+import { Plus, ShieldCheck, MoreHorizontal, CheckCircle2, Building2, X, BadgeCheck, Trash2 } from "lucide-react";
 import { Button, Card } from "@/src/components/ui";
 import { createClient } from "@/src/lib/supabase/client";
 import { banks } from "@/src/config/bank";
+import dynamic from "next/dynamic";
+
+// Usando o dynamic do next para impedir que SSR quebre a build do iframe
+const PluggyConnect = dynamic(
+    () => import("react-pluggy-connect").then((mod) => mod.PluggyConnect),
+    { ssr: false }
+);
 
 type Account = {
     id: string;
@@ -18,9 +25,9 @@ type Account = {
 
 export default function ContasPage() {
     const [accounts, setAccounts] = useState<Account[]>([]);
-    const [showModal, setShowModal] = useState(false);
-    const [selectedBanks, setSelectedBanks] = useState<string[]>([]);
     const [saving, setSaving] = useState(false);
+    const [connectToken, setConnectToken] = useState("");
+    const [dropdownOpen, setDropdownOpen] = useState<string | null>(null);
 
     useEffect(() => {
         fetchData();
@@ -32,37 +39,56 @@ export default function ContasPage() {
         if (data) setAccounts(data);
     }
 
-    const toggleBank = (id: string) => {
-        setSelectedBanks((prev) =>
-            prev.includes(id) ? prev.filter((bankId) => bankId !== id) : [...prev, id]
-        );
+    const handleDeleteAccount = async (id: string) => {
+        if (!confirm("Tem certeza que deseja excluir esta conta? Todas as transações atreladas a ela também serão excluídas.")) return;
+
+        setDropdownOpen(null);
+        const supabase = createClient();
+
+        await supabase.from("transactions").delete().eq("account_id", id);
+        await supabase.from("accounts").delete().eq("id", id);
+
+        fetchData();
     };
 
-    const handleConnect = async () => {
-        if (selectedBanks.length === 0) return;
-
+    const handleOpenConnect = async () => {
         setSaving(true);
+        try {
+            const res = await fetch("/api/pluggy");
+            const data = await res.json();
+            if (data.accessToken) {
+                setConnectToken(data.accessToken);
+            } else {
+                alert("Erro ao puxar token: " + (data.error || "Tente novamente."));
+            }
+        } catch (error) {
+            console.error("Failed to load Pluggy Connect", error);
+            alert("Falha na conexão com a Pluggy.");
+        }
+        setSaving(false);
+    };
+
+    const handlePluggySuccess = async (itemData: any) => {
+        setConnectToken("");
+        setSaving(true);
+
         const supabase = createClient();
         const { data: { session } } = await supabase.auth.getSession();
 
-        if (!session?.user) {
-            setSaving(false);
-            return;
+        if (session?.user && itemData?.item?.id) {
+            try {
+                await fetch("/api/pluggy/sync", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ itemId: itemData.item.id })
+                });
+            } catch (error) {
+                console.error(error);
+                alert("Falha ao sincronizar as transações.");
+            }
         }
 
-        const { error } = await supabase.from("accounts").insert(
-            selectedBanks.map((bankId) => ({
-                user_id: session.user.id,
-                bank_name: banks.find((b) => b.id === bankId)?.name,
-                bank_slug: bankId,
-            }))
-        );
-
-        if (!error) {
-            setShowModal(false);
-            setSelectedBanks([]);
-            fetchData();
-        }
+        fetchData();
         setSaving(false);
     };
 
@@ -87,9 +113,10 @@ export default function ContasPage() {
                             icon={<Plus className="h-4 w-4" />}
                             iconPosition="left"
                             className="!w-fit"
-                            onClick={() => setShowModal(true)}
+                            onClick={handleOpenConnect}
+                            disabled={saving}
                         >
-                            Conectar nova conta
+                            {saving ? "Sincronizando Transações..." : "Conectar nova conta"}
                         </Button>
                     </div>
                 </div>
@@ -128,9 +155,26 @@ export default function ContasPage() {
                                             <p className="text-xs text-text-secondary">Conta Corrente</p>
                                         </div>
                                     </div>
-                                    <button className="text-text-secondary hover:text-text-primary">
-                                        <MoreHorizontal className="h-5 w-5" />
-                                    </button>
+                                    <div className="relative">
+                                        <button
+                                            className="text-text-secondary hover:text-text-primary"
+                                            onClick={() => setDropdownOpen(dropdownOpen === account.id ? null : account.id)}
+                                        >
+                                            <MoreHorizontal className="h-5 w-5" />
+                                        </button>
+
+                                        {dropdownOpen === account.id && (
+                                            <div className="absolute right-0 top-8 z-10 w-44 rounded-lg border border-[#2D2A54] bg-[#0C0A20] p-1 shadow-xl">
+                                                <button
+                                                    onClick={() => handleDeleteAccount(account.id)}
+                                                    className="flex w-full items-center gap-2 rounded-md p-2 text-sm text-rose-500 hover:bg-rose-500/10 transition-colors"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                    Excluir Conta
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div>
@@ -151,56 +195,14 @@ export default function ContasPage() {
                 )}
             </div>
 
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-                    <div className="w-full max-w-md rounded-2xl border border-[#2D2A54] bg-[#0C0A20] p-6 shadow-2xl">
-                        <div className="mb-6 flex items-center justify-between">
-                            <h2 className="text-lg font-bold text-white">Conectar Nova Conta</h2>
-                            <button onClick={() => { setShowModal(false); setSelectedBanks([]); }} className="text-text-secondary hover:text-white">
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-
-                        <p className="mb-6 text-sm text-text-secondary">
-                            Selecione os bancos que deseja conectar via Open Finance.
-                        </p>
-
-                        <div className="mb-8 grid grid-cols-2 gap-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                            {banks.map((bank) => {
-                                const isSelected = selectedBanks.includes(bank.id);
-                                return (
-                                    <button
-                                        key={bank.id}
-                                        type="button"
-                                        onClick={() => toggleBank(bank.id)}
-                                        className={`relative flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${isSelected
-                                            ? "border-brand bg-brand/10"
-                                            : "border-[#2D2A54] bg-white/5 hover:border-text-muted"
-                                            }`}
-                                    >
-                                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${bank.color}`}>
-                                            <Building2 className={`h-4.5 w-4.5 ${bank.iconColor}`} />
-                                        </div>
-                                        <span className="text-sm font-medium text-white">{bank.name}</span>
-                                        {isSelected && (
-                                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                                <BadgeCheck className="h-4.5 w-4.5 text-brand" />
-                                            </div>
-                                        )}
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        <Button
-                            className="w-full"
-                            onClick={handleConnect}
-                            disabled={saving || selectedBanks.length === 0}
-                        >
-                            {saving ? "Conectando..." : "Conectar Bancos"}
-                        </Button>
-                    </div>
-                </div>
+            {connectToken && (
+                <PluggyConnect
+                    connectToken={connectToken}
+                    includeSandbox={true}
+                    onSuccess={handlePluggySuccess}
+                    onError={(error: any) => console.error("Pluggy Error", error)}
+                    onClose={() => setConnectToken("")}
+                />
             )}
         </main>
     );

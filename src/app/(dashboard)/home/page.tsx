@@ -5,6 +5,7 @@ import { createClient } from "@/src/lib/supabase/client";
 import { Download, Plus, TrendingUp, ArrowUpRight, ArrowDownRight, Building2 } from "lucide-react";
 import { Button, Card } from "@/src/components/ui";
 import { banks } from "@/src/config/bank";
+import { calculateHomeDashboard } from "@/src/lib/calculations";
 import {
     AreaChart,
     Area,
@@ -65,47 +66,12 @@ export default function HomePage() {
             .then(({ data }) => {
                 if (!data) return;
 
-                let currentBalance = 0;
-                const balanceByDate: Record<string, number> = {};
-                const categoryTotals: Record<string, number> = {};
+                const { totalIncome, totalExpense, balanceHistory, categoryExpenses } = calculateHomeDashboard(data);
 
-                const income = data.filter((t) => t.type === "income").reduce((sum, t) => sum + Number(t.amount), 0);
-                const expense = data.filter((t) => t.type === "expense").reduce((sum, t) => sum + Number(t.amount), 0);
-
-                data.forEach((tx) => {
-                    if (tx.type === "income") {
-                        currentBalance += Number(tx.amount);
-                    } else {
-                        currentBalance -= Number(tx.amount);
-
-                        if (!categoryTotals[tx.category]) {
-                            categoryTotals[tx.category] = 0;
-                        }
-                        categoryTotals[tx.category] += Number(tx.amount);
-                    }
-
-                    const dateObj = new Date(`${tx.date}T12:00:00`);
-                    const day = dateObj.getDate().toString().padStart(2, '0');
-                    const month = dateObj.toLocaleString('pt-BR', { month: 'short' }).replace('.', '');
-                    const formattedDate = `${day} ${month.charAt(0).toUpperCase() + month.slice(1)}`;
-
-                    balanceByDate[formattedDate] = currentBalance;
-                });
-
-                const historyArr = Object.keys(balanceByDate).map(date => ({
-                    date,
-                    balance: balanceByDate[date]
-                }));
-
-                const categoryArr = Object.keys(categoryTotals).map(name => ({
-                    name,
-                    value: categoryTotals[name]
-                })).sort((a, b) => b.value - a.value);
-
-                setBalanceHistory(historyArr);
-                setCategoryExpenses(categoryArr);
-                setTotalIncome(income);
-                setTotalExpense(expense);
+                setBalanceHistory(balanceHistory);
+                setCategoryExpenses(categoryExpenses);
+                setTotalIncome(totalIncome);
+                setTotalExpense(totalExpense);
             });
 
         supabase

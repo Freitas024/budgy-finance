@@ -16,6 +16,8 @@ import {
 
 export default function InsightsPage() {
     const [expenseData, setExpenseData] = useState<{ date: string; amount: number }[]>([]);
+    const [savingsInsight, setSavingsInsight] = useState<{ title: string; text: string; isPositive: boolean } | null>(null);
+    const [categoryInsight, setCategoryInsight] = useState<{ category: string; amount: number } | null>(null);
 
     useEffect(() => {
         fetchData();
@@ -27,30 +29,91 @@ export default function InsightsPage() {
 
         if (!session?.user) return;
 
-        // Buscar todas as transações do tipo "expense"
         const { data, error } = await supabase
             .from("transactions")
-            .select("amount, date")
-            .eq("type", "expense")
+            .select("amount, type, date, category")
             .eq("user_id", session.user.id)
             .order("date", { ascending: true }); // Ordem cronológica
 
         if (error || !data) return;
 
-        // Agrupar gastos por dia
-        const groupedData = data.reduce((acc: any, curr: any) => {
-            const dateObj = new Date(curr.date);
-            // Formatar data para exibição (ex: 15/abr)
-            const formattedDate = dateObj.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+        const currentDate = new Date();
+        const currentMonth = currentDate.getMonth();
+        const currentYear = currentDate.getFullYear();
 
-            if (!acc[formattedDate]) {
-                acc[formattedDate] = 0;
+        const lastMonthDate = new Date(currentDate);
+        lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+        const lastMonth = lastMonthDate.getMonth();
+        const lastMonthYear = lastMonthDate.getFullYear();
+
+        let currentIncome = 0;
+        let currentExpense = 0;
+        let lastIncome = 0;
+        let lastExpense = 0;
+
+        const groupedData: Record<string, number> = {};
+        const currentCategoryTotals: Record<string, number> = {};
+
+        data.forEach((tx) => {
+            const dateObj = new Date(`${tx.date}T12:00:00`);
+            const txMonth = dateObj.getMonth();
+            const txYear = dateObj.getFullYear();
+            const val = Number(tx.amount);
+
+            if (txYear === currentYear && txMonth === currentMonth) {
+                if (tx.type === "income") currentIncome += val;
+                else {
+                    currentExpense += val;
+                    if (!currentCategoryTotals[tx.category]) currentCategoryTotals[tx.category] = 0;
+                    currentCategoryTotals[tx.category] += val;
+                }
+            } else if (txYear === lastMonthYear && txMonth === lastMonth) {
+                if (tx.type === "income") lastIncome += val;
+                else lastExpense += val;
             }
-            acc[formattedDate] += Number(curr.amount);
-            return acc;
-        }, {});
 
-        // Converter o objeto agrupado para o formato de array que o Recharts espera
+            if (tx.type === "expense") {
+                const formattedDate = dateObj.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+                if (!groupedData[formattedDate]) {
+                    groupedData[formattedDate] = 0;
+                }
+                groupedData[formattedDate] += val;
+            }
+        });
+
+        const currentSavings = currentIncome - currentExpense;
+        const lastSavings = lastIncome - lastExpense;
+
+        let maxCategory = "Nenhuma";
+        let maxAmount = 0;
+        Object.keys(currentCategoryTotals).forEach(cat => {
+            if (currentCategoryTotals[cat] > maxAmount) {
+                maxAmount = currentCategoryTotals[cat];
+                maxCategory = cat;
+            }
+        });
+
+        setCategoryInsight({ category: maxCategory, amount: maxAmount });
+
+        if (currentSavings >= lastSavings) {
+            let percentage = "0%";
+            if (lastSavings > 0) percentage = (((currentSavings - lastSavings) / lastSavings) * 100).toFixed(0) + "%";
+            else if (currentSavings > 0) percentage = "(nova poupança)";
+
+            setSavingsInsight({
+                title: "Poupança Crescente",
+                text: `Excelente! Você conseguiu reter mais caixa este mês. Seu saldo cresceu ${percentage} em relação ao mês anterior.`,
+                isPositive: true
+            });
+        } else {
+            const difference = lastSavings - currentSavings;
+            setSavingsInsight({
+                title: "Gastos em Alta",
+                text: `Atenção! Você economizou R$ ${difference.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} a menos este mês. Segure as despesas!`,
+                isPositive: false
+            });
+        }
+
         const chartData = Object.keys(groupedData).map((date) => ({
             date,
             amount: groupedData[date]
@@ -85,25 +148,43 @@ export default function InsightsPage() {
                 </div>
 
                 <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
-                    <Card className="flex flex-col items-center border-[rgba(108,99,245,0.2)] bg-[rgba(108,99,245,0.05)] p-6 text-center">
-                        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(108,99,245,0.15)]">
-                            <TrendingUp className="h-5 w-5 text-[#818CF8]" />
-                        </div>
-                        <h3 className="mb-2 font-bold text-white">Poupança Crescente</h3>
-                        <p className="text-sm leading-relaxed text-text-secondary">
-                            Seu saldo médio cresceu <strong className="font-semibold text-white">15%</strong> este mês em comparação ao anterior.
-                        </p>
-                    </Card>
+                    {savingsInsight ? (
+                        <Card className={`flex flex-col items-center p-6 text-center ${savingsInsight.isPositive ? 'border-brand/20 bg-brand/5' : 'border-rose-500/20 bg-rose-500/5'}`}>
+                            <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-full ${savingsInsight.isPositive ? 'bg-brand/15' : 'bg-rose-500/15'}`}>
+                                {savingsInsight.isPositive ? <TrendingUp className="h-5 w-5 text-[#818CF8]" /> : <AlertTriangle className="h-5 w-5 text-rose-500" />}
+                            </div>
+                            <h3 className="mb-2 font-bold text-white">{savingsInsight.title}</h3>
+                            <p className="text-sm leading-relaxed text-text-secondary">
+                                {savingsInsight.text}
+                            </p>
+                        </Card>
+                    ) : (
+                        <Card className="flex flex-col items-center justify-center border-[#2D2A54] bg-[#131033] p-6 text-center">
+                            <span className="text-sm text-text-secondary">Analisando inteligência...</span>
+                        </Card>
+                    )}
 
-                    <Card className="flex flex-col items-center border-[rgba(244,63,94,0.2)] bg-[rgba(244,63,94,0.05)] p-6 text-center">
-                        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(244,63,94,0.15)]">
-                            <AlertTriangle className="h-5 w-5 text-[#FB7185]" />
-                        </div>
-                        <h3 className="mb-2 font-bold text-white">Atenção em Delivery</h3>
-                        <p className="text-sm leading-relaxed text-text-secondary">
-                            Você gastou <strong className="font-semibold text-white">R$ 450</strong> em iFood, 30% a mais que sua média histórica.
-                        </p>
-                    </Card>
+                    {categoryInsight ? (
+                        categoryInsight.amount > 0 ? (
+                            <Card className="flex flex-col items-center border-[rgba(244,63,94,0.2)] bg-[rgba(244,63,94,0.05)] p-6 text-center">
+                                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(244,63,94,0.15)]">
+                                    <AlertTriangle className="h-5 w-5 text-[#FB7185]" />
+                                </div>
+                                <h3 className="mb-2 font-bold text-white">Maior Gasto do Mês</h3>
+                                <p className="text-sm leading-relaxed text-text-secondary">
+                                    Sua principal despesa foi em <strong className="font-semibold text-white">{categoryInsight.category}</strong> custando <strong className="font-semibold text-white">{formatCurrency(categoryInsight.amount)}</strong>.
+                                </p>
+                            </Card>
+                        ) : (
+                            <Card className="flex flex-col items-center justify-center border-[#2D2A54] bg-[#131033] p-6 text-center">
+                                <span className="text-sm text-text-secondary">Você não registrou despesas este mês. 🎉</span>
+                            </Card>
+                        )
+                    ) : (
+                        <Card className="flex flex-col items-center justify-center border-[#2D2A54] bg-[#131033] p-6 text-center">
+                            <span className="text-sm text-text-secondary">Analisando categorias...</span>
+                        </Card>
+                    )}
 
                     <Card className="flex flex-col items-center border-[rgba(16,185,129,0.2)] bg-[rgba(16,185,129,0.05)] p-6 text-center">
                         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(16,185,129,0.15)]">
